@@ -70,8 +70,15 @@ void
 trap_init(void)
 {
 	extern struct Segdesc gdt[];
+	extern uint32_t vectors[];  // in vectors.S: array of 256 entry pointers
 
 	// LAB 3: Your code here.
+	for (size_t i = 0; i < 256; i++) {
+		SETGATE(idt[i], 0, GD_KT, vectors[i], 0);
+	}
+		
+	SETGATE(idt[T_BRKPT], 1, GD_KT, vectors[T_BRKPT], 3);
+	SETGATE(idt[T_SYSCALL], 1, GD_KT, vectors[T_SYSCALL], 3);
 
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -176,6 +183,23 @@ trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
+	int32_t ret;
+
+	switch (tf->tf_trapno)
+	{
+	case T_SYSCALL:
+		ret = syscall(tf->tf_regs.reg_eax, tf->tf_regs.reg_edx, tf->tf_regs.reg_ecx,
+					  tf->tf_regs.reg_ebx, tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
+		tf->tf_regs.reg_eax = ret;
+		return;
+	case T_PGFLT:
+		page_fault_handler(tf);
+		return;
+	case T_BRKPT:
+	case T_DEBUG:
+		monitor(tf);
+		return;
+	}
 
 	// Handle spurious interrupts
 	// The hardware sometimes raises these because of noise on the
